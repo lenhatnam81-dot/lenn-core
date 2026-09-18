@@ -144,7 +144,7 @@ GEN_ARGS=(-a -u "${RENDERED_USER_DATA}" -m "${SCRIPT_DIR}/meta-data" -d "${OUTPU
 if [[ -n "${SOURCE_ISO}" ]]; then
   GEN_ARGS+=(-s "${SOURCE_ISO}")
 fi
-bash "${GENERATOR_DIR}/generate.sh" "${GEN_ARGS[@]}"
+bash "${GENERATOR_DIR}/ubuntu-autoinstall-generator.sh" "${GEN_ARGS[@]}"
 
 sha256sum "${OUTPUT}" | tee "${OUTPUT}.sha256"
 
