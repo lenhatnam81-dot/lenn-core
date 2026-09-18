@@ -1,0 +1,57 @@
+#cloud-config
+autoinstall:
+  version: 1
+
+  # Không hỏi lại bất kỳ màn hình nào — cắm USB, bật máy, cài xong tự khởi
+  # động lại, đúng kiểu "flash & boot" như Roon ROCK.
+  interactive-sections: []
+
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+
+  network:
+    version: 2
+    ethernets:
+      alleths:
+        match:
+          name: "en*"
+        dhcp4: true
+
+  # CẢNH BÁO: layout "direct" dùng TOÀN BỘ ổ đĩa đầu tiên tìm thấy, xoá sạch
+  # dữ liệu cũ trên đó — đúng hành vi của bộ cài ROCK (appliance chuyên dụng,
+  # không dùng chung máy với việc khác).
+  storage:
+    layout:
+      name: direct
+
+  identity:
+    hostname: __LENN_HOSTNAME__
+    username: __LENN_ADMIN_USER__
+    password: "__LENN_ADMIN_PASSWORD_HASH__"
+
+  ssh:
+    install-server: true
+    allow-pw: __LENN_SSH_ALLOW_PW__
+    authorized-keys: [__LENN_SSH_AUTHORIZED_KEYS__]
+
+  packages:
+    - ffmpeg
+    - python3-venv
+    - python3-pip
+    - rsync
+    - git
+
+  late-commands:
+    # Lấy mã nguồn LENN Core từ git repo bạn tự host (xem README) rồi cài
+    # bằng chính packaging/install.sh đã có sẵn — không cài lại logic ở đây.
+    - >
+      curtin in-target --target=/target -- bash -c
+      "git clone --depth 1 '__LENN_CORE_REPO_URL__' /opt/lenn-core-src"
+    - >
+      curtin in-target --target=/target -- bash -c
+      "cd /opt/lenn-core-src && chmod +x packaging/*.sh &&
+       ./packaging/install.sh --port __LENN_HTTP_PORT__ __LENN_LIBRARY_ARGS__"
+
+  user-data:
+    disable_root: true

@@ -1,0 +1,33 @@
+[Unit]
+Description=LENN Core - music server (Phase 0)
+Documentation=https://lennaudio.com/
+# Chờ mạng lên hẳn (quan trọng nếu library_roots trỏ tới NAS qua SMB/NFS)
+# và chờ các mount hệ thống (remote-fs) đã gắn xong trước khi khởi động.
+After=network-online.target remote-fs.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=lenncore
+Group=lenncore
+WorkingDirectory=/opt/lenn-core
+ExecStart=/opt/lenn-core/venv/bin/python3 /opt/lenn-core/scripts/run.py --config /etc/lenn-core/config.json
+Restart=always
+RestartSec=3
+# Máy chủ nhạc là appliance chạy 24/7 -> tự khởi động lại nếu crash,
+# không cần ai đăng nhập can thiệp (đúng yêu cầu "không cần tài khoản").
+
+# Cứng hoá cơ bản, nhưng vẫn cho phép ghi dữ liệu thư viện/DB và đọc
+# nhạc từ ổ đĩa khác hoặc NAS đã mount.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/lenn-core
+# Nếu thư viện nhạc/NAS mount nằm ngoài /var/lib/lenn-core (ví dụ /mnt/music,
+# /mnt/nas/music), thêm từng đường dẫn đó vào đây (mỗi dòng 1 ReadWritePaths)
+# để service có quyền đọc — nếu không sẽ bị ProtectSystem chặn.
+# ReadWritePaths=/mnt/music
+# ReadWritePaths=/mnt/nas/music
+SupplementaryGroups=audio plugdev
+
+[Install]
+WantedBy=multi-user.target

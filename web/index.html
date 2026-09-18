@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LENN Core</title>
+<style>
+  :root {
+    --bg: #12131a; --panel: #1b1d27; --panel2: #23252f; --text: #eef0f5;
+    --muted: #9aa0b4; --accent: #7c9dff; --border: #2c2f3d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    padding-bottom: 92px;
+  }
+  header {
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: 0.5px; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  input[type=text] {
+    flex: 1; min-width: 160px; background: var(--panel2); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 12px; border-radius: 8px; font-size: 14px;
+  }
+  nav { display: flex; gap: 6px; padding: 10px 20px; border-bottom: 1px solid var(--border); }
+  nav button {
+    background: transparent; border: 1px solid var(--border); color: var(--muted);
+    padding: 6px 14px; border-radius: 999px; cursor: pointer; font-size: 13px;
+  }
+  nav button.active { background: var(--accent); color: #0b0c10; border-color: var(--accent); font-weight: 600; }
+  main { padding: 16px 20px; }
+  .breadcrumb { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+  .breadcrumb a { color: var(--accent); cursor: pointer; text-decoration: none; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px; cursor: pointer; transition: border-color .15s;
+  }
+  .card:hover { border-color: var(--accent); }
+  .card .title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+  .card .meta { color: var(--muted); font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; }
+  tr.track { cursor: pointer; }
+  tr.track:hover td { background: var(--panel2); }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  td.num { color: var(--muted); width: 30px; }
+  td.dur { color: var(--muted); width: 60px; text-align: right; }
+  td.spec { color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .empty { color: var(--muted); padding: 30px; text-align: center; }
+
+  #playbar {
+    position: fixed; left: 0; right: 0; bottom: 0; background: var(--panel);
+    border-top: 1px solid var(--border); padding: 10px 20px; display: flex;
+    align-items: center; gap: 14px; flex-wrap: wrap;
+  }
+  #playbar .info { min-width: 180px; }
+  #playbar .info .t { font-weight: 600; font-size: 14px; }
+  #playbar .info .a { color: var(--muted); font-size: 12px; }
+  #playbar button.ctl {
+    background: var(--panel2); border: 1px solid var(--border); color: var(--text);
+    width: 34px; height: 34px; border-radius: 50%; cursor: pointer; font-size: 14px;
+  }
+  #playbar button.ctl:hover { border-color: var(--accent); }
+  #playbar .progress { flex: 1; min-width: 140px; display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+  #playbar .progress .bar { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  #playbar .progress .bar .fill { height: 100%; background: var(--accent); width: 0%; }
+  #playbar .vol { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>LENN CORE</h1>
+  <span class="sub" id="zoneLabel">—</span>
+  <input type="text" id="search" placeholder="Tìm bài hát, album, nghệ sĩ…" />
+</header>
+<nav>
+  <button data-view="albums" class="active">Album</button>
+  <button data-view="artists">Nghệ sĩ</button>
+  <button data-view="folders">Thư mục</button>
+</nav>
+<main id="main"></main>
+
+<div id="playbar">
+  <div class="info">
+    <div class="t" id="npTitle">Chưa phát gì</div>
+    <div class="a" id="npArtist">—</div>
+  </div>
+  <button class="ctl" id="btnPrev" title="Bài trước">⏮</button>
+  <button class="ctl" id="btnPlayPause" title="Play/Pause">▶</button>
+  <button class="ctl" id="btnNext" title="Bài sau">⏭</button>
+  <div class="progress">
+    <span id="posLabel">0:00</span>
+    <div class="bar"><div class="fill" id="posFill"></div></div>
+    <span id="durLabel">0:00</span>
+  </div>
+  <div class="vol">
+    Vol <input type="range" id="volume" min="0" max="100" value="80" />
+  </div>
+</div>
+
+<script>
+const ZONE_ID = "main"; // Phase 0: 1 zone mặc định; nhiều zone sẽ thêm dropdown sau
+let currentView = "albums";
+let zoneState = null;
+
+const $ = (sel) => document.querySelector(sel);
+const main = $("#main");
+
+async function api(path, opts) {
+  const res = await fetch(path, opts);
+  if (!res.ok) throw new Error(`${path} -> ${res.status}`);
+  return res.json();
+}
+
+function fmtTime(sec) {
+  sec = Math.max(0, Math.floor(sec || 0));
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+// ---------- Views ----------
+
+async function renderAlbums() {
+  const data = await api("/library/albums");
+  if (!data.albums.length) { main.innerHTML = `<div class="empty">Thư viện trống. Thêm thư mục vào library_roots rồi gọi POST /library/scan.</div>`; return; }
+  main.innerHTML = `<div class="grid">${data.albums.map(a => `
+    <div class="card" data-album="${a.album_key}">
+      <div class="title">${escapeHtml(a.album)}</div>
+      <div class="meta">${escapeHtml(a.album_artist || "")}${a.year ? " · " + a.year : ""} · ${a.track_count} bài</div>
+    </div>`).join("")}</div>`;
+  main.querySelectorAll(".card[data-album]").forEach(el => {
+    el.onclick = () => renderAlbumTracks(el.dataset.album);
+  });
+}
+
+async function renderAlbumTracks(albumKey) {
+  const data = await api(`/library/albums/${albumKey}/tracks`);
+  main.innerHTML = `
+    <div class="breadcrumb"><a onclick="renderView('albums')">Album</a> / ${escapeHtml(data.album)}</div>
+    ${tracksTable(data.tracks)}`;
+  wireTrackRows(data.tracks);
+}
+
+async function renderArtists() {
+  const data = await api("/library/artists");
+  if (!data.artists.length) { main.innerHTML = `<div class="empty">Chưa có nghệ sĩ nào.</div>`; return; }
+  main.innerHTML = `<div class="grid">${data.artists.map(a => `
+    <div class="card" data-artist="${encodeURIComponent(a.name || "")}">
+      <div class="title">${escapeHtml(a.name || "(Không rõ)")}</div>
+      <div class="meta">${a.album_count} album · ${a.track_count} bài</div>
+    </div>`).join("")}</div>`;
+  main.querySelectorAll(".card[data-artist]").forEach(el => {
+    el.onclick = async () => {
+      const name = decodeURIComponent(el.dataset.artist);
+      const data = await api(`/library/search?q=${encodeURIComponent(name)}`);
+      main.innerHTML = `<div class="breadcrumb"><a onclick="renderView('artists')">Nghệ sĩ</a> / ${escapeHtml(name)}</div>
+        <div class="grid">${data.albums.map(a => `
+          <div class="card" data-album="${a.album_key}"><div class="title">${escapeHtml(a.album)}</div></div>`).join("")}</div>`;
+      main.querySelectorAll(".card[data-album]").forEach(c => c.onclick = () => renderAlbumTracks(c.dataset.album));
+    };
+  });
+}
+
+async function renderFolders(path) {
+  const url = path ? `/library/folders?path=${encodeURIComponent(path)}` : "/library/folders";
+  const data = await api(url);
+  const crumb = data.folder
+    ? `<div class="breadcrumb"><a onclick="renderFolders()">Gốc</a> / ${escapeHtml(data.folder.name)}</div>`
+    : `<div class="breadcrumb">Gốc thư viện</div>`;
+  const folderCards = (data.folders || []).map(f => `
+    <div class="card" data-path="${encodeURIComponent(f.path)}">📁 ${escapeHtml(f.name)}</div>`).join("");
+  main.innerHTML = `${crumb}
+    ${folderCards ? `<div class="grid">${folderCards}</div>` : ""}
+    ${(data.tracks && data.tracks.length) ? tracksTable(data.tracks) : ""}
+    ${(!folderCards && !(data.tracks && data.tracks.length)) ? `<div class="empty">Trống.</div>` : ""}`;
+  main.querySelectorAll(".card[data-path]").forEach(el => {
+    el.onclick = () => renderFolders(decodeURIComponent(el.dataset.path));
+  });
+  if (data.tracks) wireTrackRows(data.tracks);
+  currentFoldersRoot = path;
+}
+let currentFoldersRoot = undefined;
+
+function tracksTable(tracks) {
+  return `<table><tbody>${tracks.map((t, i) => `
+    <tr class="track" data-index="${i}">
+      <td class="num">${t.track_no ?? i + 1}</td>
+      <td>${escapeHtml(t.title || "(không tên)")}</td>
+      <td class="spec">${(t.codec || "").toUpperCase()} ${t.sample_rate ? Math.round(t.sample_rate/1000)+"kHz" : ""} ${t.bit_depth ? t.bit_depth+"bit" : ""}</td>
+      <td class="dur">${fmtTime(t.duration_seconds)}</td>
+    </tr>`).join("")}</tbody></table>`;
+}
+
+function wireTrackRows(tracks) {
+  main.querySelectorAll("tr.track").forEach(row => {
+    row.onclick = async () => {
+      const idx = parseInt(row.dataset.index, 10);
+      const ids = tracks.map(t => t.id);
+      await api(`/zones/${ZONE_ID}/play`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ track_ids: ids, start_index: idx }),
+      });
+    };
+  });
+}
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+
+function renderView(view) {
+  currentView = view;
+  document.querySelectorAll("nav button").forEach(b => b.classList.toggle("active", b.dataset.view === view));
+  if (view === "albums") renderAlbums();
+  else if (view === "artists") renderArtists();
+  else if (view === "folders") renderFolders();
+}
+window.renderView = renderView;
+
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => renderView(b.dataset.view));
+
+$("#search").addEventListener("keydown", async (e) => {
+  if (e.key !== "Enter") return;
+  const q = e.target.value.trim();
+  if (!q) return renderView(currentView);
+  const data = await api(`/library/search?q=${encodeURIComponent(q)}`);
+  main.innerHTML = `<div class="breadcrumb">Kết quả cho "${escapeHtml(q)}"</div>${tracksTable(data.tracks)}`;
+  wireTrackRows(data.tracks);
+});
+
+// ---------- Playback bar ----------
+
+function updatePlaybar(zone) {
+  zoneState = zone;
+  $("#zoneLabel").textContent = zone.name || zone.id;
+  const t = zone.current_track;
+  $("#npTitle").textContent = t ? t.title : "Chưa phát gì";
+  $("#npArtist").textContent = t ? (t.artist || t.album_artist || "") : "—";
+  $("#btnPlayPause").textContent = zone.state === "playing" ? "⏸" : "▶";
+  $("#durLabel").textContent = fmtTime(t ? t.duration_seconds : 0);
+  $("#posLabel").textContent = fmtTime(zone.position_seconds);
+  const pct = t && t.duration_seconds ? Math.min(100, (zone.position_seconds / t.duration_seconds) * 100) : 0;
+  $("#posFill").style.width = pct + "%";
+  if (document.activeElement !== $("#volume")) $("#volume").value = zone.volume;
+}
+
+async function refreshZone() {
+  const data = await api(`/zones/${ZONE_ID}`);
+  updatePlaybar(data);
+}
+
+$("#btnPlayPause").onclick = async () => {
+  if (!zoneState) return;
+  await api(`/zones/${ZONE_ID}/${zoneState.state === "playing" ? "pause" : "resume"}`, { method: "POST" });
+};
+$("#btnNext").onclick = () => api(`/zones/${ZONE_ID}/next`, { method: "POST" });
+$("#btnPrev").onclick = () => api(`/zones/${ZONE_ID}/previous`, { method: "POST" });
+$("#volume").addEventListener("change", (e) => {
+  api(`/zones/${ZONE_ID}/volume`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ volume: parseInt(e.target.value, 10) }),
+  });
+});
+
+// SSE: cập nhật playbar realtime, không cần polling dày
+function connectEvents() {
+  const es = new EventSource("/events");
+  const onZoneEvent = (ev) => {
+    try {
+      const data = JSON.parse(ev.data);
+      if (data.zone && data.zone.id === ZONE_ID) updatePlaybar(data.zone);
+    } catch (e) {}
+  };
+  es.addEventListener("now_playing_changed", onZoneEvent);
+  es.addEventListener("playback_state_changed", onZoneEvent);
+  es.addEventListener("queue_changed", onZoneEvent);
+  es.onerror = () => { es.close(); setTimeout(connectEvents, 3000); };
+}
+
+// Vị trí phát (position) không bắn qua SSE dày để tránh spam — cập nhật nhẹ bằng polling 1s
+setInterval(() => { if (zoneState && zoneState.state === "playing") refreshZone(); }, 1000);
+
+renderView("albums");
+refreshZone();
+connectEvents();
+</script>
+</body>
+</html>

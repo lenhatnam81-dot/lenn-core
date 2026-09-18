@@ -1,0 +1,16 @@
+{
+  "library_roots": [
+    "/mnt/music/local",
+    "/mnt/nas/music"
+  ],
+  "db_path": "data/lenn_core.db",
+  "artwork_cache_dir": "data/artwork",
+  "zones": [
+    { "id": "main", "name": "Phòng khách", "output_backend": "alsa", "alsa_device": "hw:0,0" },
+    { "id": "study", "name": "Phòng làm việc", "output_backend": "alsa", "alsa_device": "hw:1,0" }
+  ],
+  "http_host": "0.0.0.0",
+  "http_port": 8000,
+  "scan_on_startup": true,
+  "watch_realtime": true
+}
